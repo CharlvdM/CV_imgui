@@ -123,6 +123,8 @@ namespace ImGui
 }
 */
 
+#ifdef TE_PCC_GUI
+
 // From imconfig-sfml
 #include <SFML/Graphics/Color.hpp>
 #include <SFML/System/Vector2.hpp>
@@ -147,3 +149,5 @@ namespace ImGui
         return sf::Color(static_cast<sf::Uint8>(x * 255.f), static_cast<sf::Uint8>(y * 255.f), static_cast<sf::Uint8>(z * 255.f),          \
                          static_cast<sf::Uint8>(w * 255.f));                                                                               \
     }
+
+#endif // TE_PCC_GUI
