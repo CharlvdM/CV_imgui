@@ -1,6 +1,8 @@
 Dear ImGui
 =====
 
+Disclaimer: This is my copy of the ImGui repository found here: https://github.com/ocornut/imgui.git. The copy is needed to enable my own updates without interfering with the actual ImGui repo. The rest of this README is as it was written by the author.
+
 <center><b><i>"Give someone state and they'll have a bug one day, but teach them how to represent state in two separate locations that have to be kept in sync and they'll have bugs for a lifetime."</i></b></center> <a href="https://twitter.com/rygorous/status/1507178315886444544">-ryg</a>
 
 ----
