@@ -22,6 +22,7 @@
 // CHANGELOG
 // (minor and older changes stripped away, please see git history for details)
 //  2023-XX-XX: Platform: Added support for multiple windows via the ImGuiPlatformIO interface.
+//  2023-04-06: Inputs: Avoid calling SDL_StartTextInput()/SDL_StopTextInput() as they don't only pertain to IME. It's unclear exactly what their relation is to IME. (#6306)
 //  2023-04-04: Inputs: Added support for io.AddMouseSourceEvent() to discriminate ImGuiMouseSource_Mouse/ImGuiMouseSource_TouchScreen. (#2702)
 //  2023-02-23: Accept SDL_GetPerformanceCounter() not returning a monotonically increasing value. (#6189, #6114, #3644)
 //  2023-02-07: Implement IME handler (io.SetPlatformImeDataFn will call SDL_SetTextInputRect()/SDL_StartTextInput()).
@@ -155,21 +156,16 @@ static void ImGui_ImplSDL2_SetClipboardText(void*, const char* text)
 }
 
 // Note: native IME will only display if user calls SDL_SetHint(SDL_HINT_IME_SHOW_UI, "1") _before_ SDL_CreateWindow().
-static void ImGui_ImplSDL2_SetPlatformImeData(ImGuiViewport*, ImGuiPlatformImeData* data)
+static void ImGui_ImplSDL2_SetPlatformImeData(ImGuiViewport* viewport, ImGuiPlatformImeData* data)
 {
     if (data->WantVisible)
     {
         SDL_Rect r;
-        r.x = (int)data->InputPos.x;
-        r.y = (int)data->InputPos.y;
+        r.x = (int)(data->InputPos.x - viewport->Pos.x);
+        r.y = (int)(data->InputPos.y - viewport->Pos.y + data->InputLineHeight);
         r.w = 1;
         r.h = (int)data->InputLineHeight;
         SDL_SetTextInputRect(&r);
-        SDL_StartTextInput();
-    }
-    else
-    {
-        SDL_StopTextInput();
     }
 }
 
@@ -552,7 +548,7 @@ void ImGui_ImplSDL2_Shutdown()
         SDL_free(bd->ClipboardTextData);
     for (ImGuiMouseCursor cursor_n = 0; cursor_n < ImGuiMouseCursor_COUNT; cursor_n++)
         SDL_FreeCursor(bd->MouseCursors[cursor_n]);
-    bd->LastMouseCursor = NULL;
+    bd->LastMouseCursor = nullptr;
 
     io.BackendPlatformName = nullptr;
     io.BackendPlatformUserData = nullptr;
@@ -781,7 +777,7 @@ void ImGui_ImplSDL2_NewFrame()
 // If you are new to dear imgui or creating a new binding for dear imgui, it is recommended that you completely ignore this section first..
 //--------------------------------------------------------------------------------------------------------
 
-// Helper structure we store in the void* RenderUserData field of each ImGuiViewport to easily retrieve our backend data.
+// Helper structure we store in the void* RendererUserData field of each ImGuiViewport to easily retrieve our backend data.
 struct ImGui_ImplSDL2_ViewportData
 {
     SDL_Window*     Window;

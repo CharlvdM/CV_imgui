@@ -1,4 +1,4 @@
-// dear imgui, v1.89.5 WIP
+// dear imgui, v1.89.5
 // (widgets code)
 
 /*
@@ -648,7 +648,12 @@ bool ImGui::ButtonBehavior(const ImRect& bb, ImGuiID id, bool* out_hovered, bool
                 g.ActiveIdClickOffset = g.IO.MousePos - bb.Min;
 
             const int mouse_button = g.ActiveIdMouseButton;
-            if (IsMouseDown(mouse_button, test_owner_id))
+            if (mouse_button == -1)
+            {
+                // Fallback for the rare situation were g.ActiveId was set programmatically or from another widget (e.g. #6304).
+                ClearActiveID();
+            }
+            else if (IsMouseDown(mouse_button, test_owner_id))
             {
                 held = true;
             }
@@ -7098,7 +7103,7 @@ void ImGui::EndMainMenuBar()
     // FIXME: With this strategy we won't be able to restore a NULL focus.
     ImGuiContext& g = *GImGui;
     if (g.CurrentWindow == g.NavWindow && g.NavLayer == ImGuiNavLayer_Main && !g.NavAnyRequest)
-        FocusTopMostWindowUnderOne(g.NavWindow, NULL);
+        FocusTopMostWindowUnderOne(g.NavWindow, NULL, NULL);
 
     End();
 }

@@ -1,4 +1,4 @@
-// dear imgui, v1.89.5 WIP
+// dear imgui, v1.89.5
 // (main code and documentation)
 
 // Help:
@@ -287,7 +287,7 @@ CODE
      // Build and load the texture atlas into a texture
      // (In the examples/ app this is usually done within the ImGui_ImplXXX_Init() function from one of the demo Renderer)
      int width, height;
-     unsigned char* pixels = NULL;
+     unsigned char* pixels = nullptr;
      io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
 
      // At this point you've got the texture data and you need to upload that to your graphic system:
@@ -1312,6 +1312,7 @@ void ImGuiIO::AddInputCharacter(unsigned int c)
     ImGuiInputEvent e;
     e.Type = ImGuiInputEventType_Text;
     e.Source = ImGuiInputSource_Keyboard;
+    e.EventId = g.InputEventsNextEventId++;
     e.Text.Char = c;
     g.InputEventsQueue.push_back(e);
 }
@@ -1450,6 +1451,7 @@ void ImGuiIO::AddKeyAnalogEvent(ImGuiKey key, bool down, float analog_value)
     ImGuiInputEvent e;
     e.Type = ImGuiInputEventType_Key;
     e.Source = ImGui::IsGamepadKey(key) ? ImGuiInputSource_Gamepad : ImGuiInputSource_Keyboard;
+    e.EventId = g.InputEventsNextEventId++;
     e.Key.Key = key;
     e.Key.Down = down;
     e.Key.AnalogValue = analog_value;
@@ -1514,6 +1516,7 @@ void ImGuiIO::AddMousePosEvent(float x, float y)
     ImGuiInputEvent e;
     e.Type = ImGuiInputEventType_MousePos;
     e.Source = ImGuiInputSource_Mouse;
+    e.EventId = g.InputEventsNextEventId++;
     e.MousePos.PosX = pos.x;
     e.MousePos.PosY = pos.y;
     e.MouseWheel.MouseSource = g.InputEventsNextMouseSource;
@@ -1537,6 +1540,7 @@ void ImGuiIO::AddMouseButtonEvent(int mouse_button, bool down)
     ImGuiInputEvent e;
     e.Type = ImGuiInputEventType_MouseButton;
     e.Source = ImGuiInputSource_Mouse;
+    e.EventId = g.InputEventsNextEventId++;
     e.MouseButton.Button = mouse_button;
     e.MouseButton.Down = down;
     e.MouseWheel.MouseSource = g.InputEventsNextMouseSource;
@@ -1556,6 +1560,7 @@ void ImGuiIO::AddMouseWheelEvent(float wheel_x, float wheel_y)
     ImGuiInputEvent e;
     e.Type = ImGuiInputEventType_MouseWheel;
     e.Source = ImGuiInputSource_Mouse;
+    e.EventId = g.InputEventsNextEventId++;
     e.MouseWheel.WheelX = wheel_x;
     e.MouseWheel.WheelY = wheel_y;
     e.MouseWheel.MouseSource = g.InputEventsNextMouseSource;
@@ -1605,6 +1610,7 @@ void ImGuiIO::AddFocusEvent(bool focused)
 
     ImGuiInputEvent e;
     e.Type = ImGuiInputEventType_Focus;
+    e.EventId = g.InputEventsNextEventId++;
     e.AppFocused.Focused = focused;
     g.InputEventsQueue.push_back(e);
 }
@@ -3320,6 +3326,9 @@ void ImGui::RenderTextWrapped(ImVec2 pos, const char* text, const char* text_end
 
 // Default clip_rect uses (pos_min,pos_max)
 // Handle clipping on CPU immediately (vs typically let the GPU clip the triangles that are overlapping the clipping rectangle edges)
+// FIXME-OPT: Since we have or calculate text_size we could coarse clip whole block immediately, especally for text above draw_list->DrawList.
+// Effectively as this is called from widget doing their own coarse clipping it's not very valuable presently. Next time function will take
+// better advantage of the render function taking size into account for coarse clipping.
 void ImGui::RenderTextClippedEx(ImDrawList* draw_list, const ImVec2& pos_min, const ImVec2& pos_max, const char* text, const char* text_display_end, const ImVec2* text_size_if_known, const ImVec2& align, const ImRect* clip_rect)
 {
     // Perform CPU side clipping for single clipped element to avoid using scissor state
@@ -4806,7 +4815,7 @@ void ImGui::NewFrame()
 
     // Closing the focused window restore focus to the first active root window in descending z-order
     if (g.NavWindow && !g.NavWindow->WasActive)
-        FocusTopMostWindowUnderOne(NULL, NULL);
+        FocusTopMostWindowUnderOne(NULL, NULL, NULL);
 
     // No window should be open at the beginning of the frame.
     // But in order to allow the user to call NewFrame() multiple times without calling Render(), we are doing an explicit clear.
@@ -4963,7 +4972,7 @@ static void SetupViewportDrawData(ImGuiViewportP* viewport, ImVector<ImDrawList*
     // FIXME: Note that we however do NOT attempt to report "zero drawlist / vertices" into the ImDrawData structure.
     // This is because the work has been done already, and its wasted! We should fix that and add optimizations for
     // it earlier in the pipeline, rather than pretend to hide the data at the end of the pipeline.
-    const bool is_minimized = (viewport->Flags & ImGuiViewportFlags_Minimized) != 0;
+    const bool is_minimized = (viewport->Flags & ImGuiViewportFlags_IsMinimized) != 0;
 
     ImGuiIO& io = ImGui::GetIO();
     ImDrawData* draw_data = &viewport->DrawDataP;
@@ -6847,7 +6856,7 @@ bool ImGui::Begin(const char* name, bool* p_open, ImGuiWindowFlags flags)
             window->Pos = FindBestWindowPosForPopup(window);
 
         // Late create viewport if we don't fit within our current host viewport.
-        if (window->ViewportAllowPlatformMonitorExtend >= 0 && !window->ViewportOwned && !(window->Viewport->Flags & ImGuiViewportFlags_Minimized))
+        if (window->ViewportAllowPlatformMonitorExtend >= 0 && !window->ViewportOwned && !(window->Viewport->Flags & ImGuiViewportFlags_IsMinimized))
             if (!window->Viewport->GetMainRect().Contains(window->Rect()))
             {
                 // This is based on the assumption that the DPI will be known ahead (same as the DPI of the selection done in UpdateSelectWindowViewport)
@@ -7502,7 +7511,7 @@ void ImGui::FocusWindow(ImGuiWindow* window)
         BringWindowToDisplayFront(display_front_window);
 }
 
-void ImGui::FocusTopMostWindowUnderOne(ImGuiWindow* under_this_window, ImGuiWindow* ignore_window)
+void ImGui::FocusTopMostWindowUnderOne(ImGuiWindow* under_this_window, ImGuiWindow* ignore_window, ImGuiViewport* filter_viewport)
 {
     ImGuiContext& g = *GImGui;
     int start_idx = g.WindowsFocusOrder.Size - 1;
@@ -7522,17 +7531,20 @@ void ImGui::FocusTopMostWindowUnderOne(ImGuiWindow* under_this_window, ImGuiWind
         // We may later decide to test for different NoXXXInputs based on the active navigation input (mouse vs nav) but that may feel more confusing to the user.
         ImGuiWindow* window = g.WindowsFocusOrder[i];
         IM_ASSERT(window == window->RootWindow);
-        if (window != ignore_window && window->WasActive)
-            if ((window->Flags & (ImGuiWindowFlags_NoMouseInputs | ImGuiWindowFlags_NoNavInputs)) != (ImGuiWindowFlags_NoMouseInputs | ImGuiWindowFlags_NoNavInputs))
-            {
-                // FIXME-DOCK: This is failing (lagging by one frame) for docked windows.
-                // If A and B are docked into window and B disappear, at the NewFrame() call site window->NavLastChildNavWindow will still point to B.
-                // We might leverage the tab order implicitly stored in window->DockNodeAsHost->TabBar (essentially the 'most_recently_selected_tab' code in tab bar will do that but on next update)
-                // to tell which is the "previous" window. Or we may leverage 'LastFrameFocused/LastFrameJustFocused' and have this function handle child window itself?
-                ImGuiWindow* focus_window = NavRestoreLastChildNavWindow(window);
-                FocusWindow(focus_window);
-                return;
-            }
+        if (window == ignore_window || !window->WasActive)
+            continue;
+        if (filter_viewport != NULL && window->Viewport != filter_viewport)
+            continue;
+        if ((window->Flags & (ImGuiWindowFlags_NoMouseInputs | ImGuiWindowFlags_NoNavInputs)) != (ImGuiWindowFlags_NoMouseInputs | ImGuiWindowFlags_NoNavInputs))
+        {
+            // FIXME-DOCK: This is failing (lagging by one frame) for docked windows.
+            // If A and B are docked into window and B disappear, at the NewFrame() call site window->NavLastChildNavWindow will still point to B.
+            // We might leverage the tab order implicitly stored in window->DockNodeAsHost->TabBar (essentially the 'most_recently_selected_tab' code in tab bar will do that but on next update)
+            // to tell which is the "previous" window. Or we may leverage 'LastFrameFocused/LastFrameJustFocused' and have this function handle child window itself?
+            ImGuiWindow* focus_window = NavRestoreLastChildNavWindow(window);
+            FocusWindow(focus_window);
+            return;
+        }
     }
     FocusWindow(NULL);
 }
@@ -10902,7 +10914,7 @@ void ImGui::ClosePopupToLevel(int remaining, bool restore_focus_to_window_under_
         if (focus_window && !focus_window->WasActive && popup_window)
         {
             // Fallback
-            FocusTopMostWindowUnderOne(popup_window, NULL);
+            FocusTopMostWindowUnderOne(popup_window, NULL, NULL);
         }
         else
         {
@@ -12177,16 +12189,14 @@ void ImGui::NavMoveRequestApplyResult()
     // Scroll to keep newly navigated item fully into view.
     if (g.NavLayer == ImGuiNavLayer_Main)
     {
+        ImRect rect_abs = WindowRectRelToAbs(result->Window, result->RectRel);
+        ScrollToRectEx(result->Window, rect_abs, g.NavMoveScrollFlags);
+
         if (g.NavMoveFlags & ImGuiNavMoveFlags_ScrollToEdgeY)
         {
-            // FIXME: Should remove this
+            // FIXME: Should remove this? Or make more precise: use ScrollToRectEx() with edge?
             float scroll_target = (g.NavMoveDir == ImGuiDir_Up) ? result->Window->ScrollMax.y : 0.0f;
             SetScrollY(result->Window, scroll_target);
-        }
-        else
-        {
-            ImRect rect_abs = WindowRectRelToAbs(result->Window, result->RectRel);
-            ScrollToRectEx(result->Window, rect_abs, g.NavMoveScrollFlags);
         }
     }
 
@@ -12603,6 +12613,8 @@ static void ImGui::NavUpdateWindowing()
     // Apply final focus
     if (apply_focus_window && (g.NavWindow == NULL || apply_focus_window != g.NavWindow->RootWindow))
     {
+        // FIXME: Many actions here could be part of a higher-level/reused function. Why aren't they in FocusWindow()
+        // Investigate for each of them: ClearActiveID(), NavRestoreHighlightAfterMove(), NavRestoreLastChildNavWindow(), ClosePopupsOverWindow(), NavInitWindow()
         ImGuiViewport* previous_viewport = g.NavWindow ? g.NavWindow->Viewport : NULL;
         ClearActiveID();
         NavRestoreHighlightAfterMove();
@@ -13519,7 +13531,7 @@ ImGuiWindowSettings* ImGui::FindWindowSettingsByID(ImGuiID id)
 {
     ImGuiContext& g = *GImGui;
     for (ImGuiWindowSettings* settings = g.SettingsWindows.begin(); settings != NULL; settings = g.SettingsWindows.next_chunk(settings))
-        if (settings->ID == id)
+        if (settings->ID == id && !settings->WantDelete)
             return settings;
     return NULL;
 }
@@ -13778,7 +13790,7 @@ static bool ImGui::UpdateTryMergeWindowIntoHostViewport(ImGuiWindow* window, ImG
         return false;
     if ((viewport->Flags & ImGuiViewportFlags_CanHostOtherWindows) == 0)
         return false;
-    if ((viewport->Flags & ImGuiViewportFlags_Minimized) != 0)
+    if ((viewport->Flags & ImGuiViewportFlags_IsMinimized) != 0)
         return false;
     if (!viewport->GetMainRect().Contains(window->Rect()))
         return false;
@@ -13861,8 +13873,8 @@ ImGuiViewportP* ImGui::FindHoveredViewportFromPlatformWindowStack(const ImVec2& 
     for (int n = 0; n < g.Viewports.Size; n++)
     {
         ImGuiViewportP* viewport = g.Viewports[n];
-        if (!(viewport->Flags & (ImGuiViewportFlags_NoInputs | ImGuiViewportFlags_Minimized)) && viewport->GetMainRect().Contains(mouse_platform_pos))
-            if (best_candidate == NULL || best_candidate->LastFrontMostStampCount < viewport->LastFrontMostStampCount)
+        if (!(viewport->Flags & (ImGuiViewportFlags_NoInputs | ImGuiViewportFlags_IsMinimized)) && viewport->GetMainRect().Contains(mouse_platform_pos))
+            if (best_candidate == NULL || best_candidate->LastFocusedStampCount < viewport->LastFocusedStampCount)
                 best_candidate = viewport;
     }
     return best_candidate;
@@ -13876,22 +13888,63 @@ static void ImGui::UpdateViewportsNewFrame()
     IM_ASSERT(g.PlatformIO.Viewports.Size <= g.Viewports.Size);
 
     // Update Minimized status (we need it first in order to decide if we'll apply Pos/Size of the main viewport)
+    // Update Focused status
     const bool viewports_enabled = (g.ConfigFlagsCurrFrame & ImGuiConfigFlags_ViewportsEnable) != 0;
     if (viewports_enabled)
     {
+        ImGuiViewportP* focused_viewport = NULL;
         for (int n = 0; n < g.Viewports.Size; n++)
         {
             ImGuiViewportP* viewport = g.Viewports[n];
             const bool platform_funcs_available = viewport->PlatformWindowCreated;
             if (g.PlatformIO.Platform_GetWindowMinimized && platform_funcs_available)
             {
-                bool minimized = g.PlatformIO.Platform_GetWindowMinimized(viewport);
-                if (minimized)
-                    viewport->Flags |= ImGuiViewportFlags_Minimized;
+                bool is_minimized = g.PlatformIO.Platform_GetWindowMinimized(viewport);
+                if (is_minimized)
+                    viewport->Flags |= ImGuiViewportFlags_IsMinimized;
                 else
-                    viewport->Flags &= ~ImGuiViewportFlags_Minimized;
+                    viewport->Flags &= ~ImGuiViewportFlags_IsMinimized;
+            }
+
+            // Update our implicit z-order knowledge of platform windows, which is used when the backend cannot provide io.MouseHoveredViewport.
+            // When setting Platform_GetWindowFocus, it is expected that the platform backend can handle calls without crashing if it doesn't have data stored.
+            if (g.PlatformIO.Platform_GetWindowFocus && platform_funcs_available)
+            {
+                bool is_focused = g.PlatformIO.Platform_GetWindowFocus(viewport);
+                if (is_focused)
+                    viewport->Flags |= ImGuiViewportFlags_IsFocused;
+                else
+                    viewport->Flags &= ~ImGuiViewportFlags_IsFocused;
+                if (is_focused)
+                    focused_viewport = viewport;
             }
         }
+
+        // Focused viewport has changed?
+        if (focused_viewport && g.PlatformLastFocusedViewportId != focused_viewport->ID)
+        {
+            // Store a tag so we can infer z-order easily from all our windows
+            // We compare PlatformLastFocusedViewportId so newly created viewports with _NoFocusOnAppearing flag
+            // will keep the front most stamp instead of losing it back to their parent viewport.
+            if (focused_viewport->LastFocusedStampCount != g.ViewportFocusedStampCount)
+                focused_viewport->LastFocusedStampCount = ++g.ViewportFocusedStampCount;
+            g.PlatformLastFocusedViewportId = focused_viewport->ID;
+
+            // Focus associated dear imgui window if focus didn't happen with a click within imgui boundaries (#6299)
+            // e.g. Clicking platform title bar.
+            // FIXME: perhaps 'FocusTopMostWindowUnderOne()' can handle the 'focused_window->Window != NULL' case as well.
+            if (!IsAnyMouseDown())
+            {
+                if (focused_viewport->Window != NULL)
+                    FocusWindow(NavRestoreLastChildNavWindow(focused_viewport->Window));
+                else if (focused_viewport->LastFocusedHadNavWindow)
+                    FocusTopMostWindowUnderOne(NULL, NULL, focused_viewport);
+                else
+                    FocusWindow(NULL);
+            }
+        }
+        if (focused_viewport)
+            focused_viewport->LastFocusedHadNavWindow = (g.NavWindow != NULL) && (g.NavWindow->Viewport == focused_viewport);
     }
 
     // Create/update main viewport with current platform position.
@@ -13901,7 +13954,7 @@ static void ImGui::UpdateViewportsNewFrame()
     IM_ASSERT(main_viewport->Window == NULL);
     ImVec2 main_viewport_pos = viewports_enabled ? g.PlatformIO.Platform_GetWindowPos(main_viewport) : ImVec2(0.0f, 0.0f);
     ImVec2 main_viewport_size = g.IO.DisplaySize;
-    if (viewports_enabled && (main_viewport->Flags & ImGuiViewportFlags_Minimized))
+    if (viewports_enabled && (main_viewport->Flags & ImGuiViewportFlags_IsMinimized))
     {
         main_viewport_pos = main_viewport->Pos;    // Preserve last pos/size when minimized (FIXME: We don't do the same for Size outside of the viewport path)
         main_viewport_size = main_viewport->Size;
@@ -13929,7 +13982,7 @@ static void ImGui::UpdateViewportsNewFrame()
         {
             // Update Position and Size (from Platform Window to ImGui) if requested.
             // We do it early in the frame instead of waiting for UpdatePlatformWindows() to avoid a frame of lag when moving/resizing using OS facilities.
-            if (!(viewport->Flags & ImGuiViewportFlags_Minimized) && platform_funcs_available)
+            if (!(viewport->Flags & ImGuiViewportFlags_IsMinimized) && platform_funcs_available)
             {
                 // Viewport->WorkPos and WorkSize will be updated below
                 if (viewport->PlatformRequestMove)
@@ -14090,7 +14143,7 @@ ImGuiViewportP* ImGui::AddUpdateViewport(ImGuiWindow* window, ImGuiID id, const 
             viewport->Pos = pos;
         if (!viewport->PlatformRequestResize || viewport->ID == IMGUI_VIEWPORT_DEFAULT_ID)
             viewport->Size = size;
-        viewport->Flags = flags | (viewport->Flags & ImGuiViewportFlags_Minimized); // Preserve existing flags
+        viewport->Flags = flags | (viewport->Flags & (ImGuiViewportFlags_IsMinimized | ImGuiViewportFlags_IsFocused)); // Preserve existing flags
     }
     else
     {
@@ -14467,37 +14520,12 @@ void ImGui::UpdatePlatformWindows()
 
             // Even without focus, we assume the window becomes front-most.
             // This is useful for our platform z-order heuristic when io.MouseHoveredViewport is not available.
-            if (viewport->LastFrontMostStampCount != g.ViewportFrontMostStampCount)
-                viewport->LastFrontMostStampCount = ++g.ViewportFrontMostStampCount;
-            }
+            if (viewport->LastFocusedStampCount != g.ViewportFocusedStampCount)
+                viewport->LastFocusedStampCount = ++g.ViewportFocusedStampCount;
+        }
 
         // Clear request flags
         viewport->ClearRequestFlags();
-    }
-
-    // Update our implicit z-order knowledge of platform windows, which is used when the backend cannot provide io.MouseHoveredViewport.
-    // When setting Platform_GetWindowFocus, it is expected that the platform backend can handle calls without crashing if it doesn't have data stored.
-    // FIXME-VIEWPORT: We should use this information to also set dear imgui-side focus, allowing us to handle os-level alt+tab.
-    if (g.PlatformIO.Platform_GetWindowFocus != NULL)
-    {
-        ImGuiViewportP* focused_viewport = NULL;
-        for (int n = 0; n < g.Viewports.Size && focused_viewport == NULL; n++)
-        {
-            ImGuiViewportP* viewport = g.Viewports[n];
-            if (viewport->PlatformWindowCreated)
-                if (g.PlatformIO.Platform_GetWindowFocus(viewport))
-                    focused_viewport = viewport;
-        }
-
-        // Store a tag so we can infer z-order easily from all our windows
-        // We compare PlatformLastFocusedViewportId so newly created viewports with _NoFocusOnAppearing flag
-        // will keep the front most stamp instead of losing it back to their parent viewport.
-        if (focused_viewport && g.PlatformLastFocusedViewportId != focused_viewport->ID)
-        {
-            if (focused_viewport->LastFrontMostStampCount != g.ViewportFrontMostStampCount)
-                focused_viewport->LastFrontMostStampCount = ++g.ViewportFrontMostStampCount;
-            g.PlatformLastFocusedViewportId = focused_viewport->ID;
-        }
     }
 }
 
@@ -14520,7 +14548,7 @@ void ImGui::RenderPlatformWindowsDefault(void* platform_render_arg, void* render
     for (int i = 1; i < platform_io.Viewports.Size; i++)
     {
         ImGuiViewport* viewport = platform_io.Viewports[i];
-        if (viewport->Flags & ImGuiViewportFlags_Minimized)
+        if (viewport->Flags & ImGuiViewportFlags_IsMinimized)
             continue;
         if (platform_io.Platform_RenderWindow) platform_io.Platform_RenderWindow(viewport, platform_render_arg);
         if (platform_io.Renderer_RenderWindow) platform_io.Renderer_RenderWindow(viewport, renderer_render_arg);
@@ -14528,7 +14556,7 @@ void ImGui::RenderPlatformWindowsDefault(void* platform_render_arg, void* render
     for (int i = 1; i < platform_io.Viewports.Size; i++)
     {
         ImGuiViewport* viewport = platform_io.Viewports[i];
-        if (viewport->Flags & ImGuiViewportFlags_Minimized)
+        if (viewport->Flags & ImGuiViewportFlags_IsMinimized)
             continue;
         if (platform_io.Platform_SwapBuffers) platform_io.Platform_SwapBuffers(viewport, platform_render_arg);
         if (platform_io.Renderer_SwapBuffers) platform_io.Renderer_SwapBuffers(viewport, renderer_render_arg);
@@ -18734,7 +18762,7 @@ void ImGui::DebugRenderViewportThumbnail(ImDrawList* draw_list, ImGuiViewportP* 
 
     ImVec2 scale = bb.GetSize() / viewport->Size;
     ImVec2 off = bb.Min - viewport->Pos * scale;
-    float alpha_mul = (viewport->Flags & ImGuiViewportFlags_Minimized) ? 0.30f : 1.00f;
+    float alpha_mul = (viewport->Flags & ImGuiViewportFlags_IsMinimized) ? 0.30f : 1.00f;
     window->DrawList->AddRectFilled(bb.Min, bb.Max, ImGui::GetColorU32(ImGuiCol_Border, alpha_mul * 0.40f));
     for (int i = 0; i != g.Windows.Size; i++)
     {
@@ -18780,11 +18808,11 @@ static void RenderViewportsThumbnails()
     ImGui::Dummy(bb_full.GetSize() * SCALE);
 }
 
-static int IMGUI_CDECL ViewportComparerByFrontMostStampCount(const void* lhs, const void* rhs)
+static int IMGUI_CDECL ViewportComparerByLastFocusedStampCount(const void* lhs, const void* rhs)
 {
     const ImGuiViewportP* a = *(const ImGuiViewportP* const*)lhs;
     const ImGuiViewportP* b = *(const ImGuiViewportP* const*)rhs;
-    return b->LastFrontMostStampCount - a->LastFrontMostStampCount;
+    return b->LastFocusedStampCount - a->LastFocusedStampCount;
 }
 
 // Draw an arbitrary US keyboard layout to visualize translated keys
@@ -19157,12 +19185,14 @@ void ImGui::ShowMetricsWindow(bool* p_open)
             viewports.resize(g.Viewports.Size);
             memcpy(viewports.Data, g.Viewports.Data, g.Viewports.size_in_bytes());
             if (viewports.Size > 1)
-                ImQsort(viewports.Data, viewports.Size, sizeof(ImGuiViewport*), ViewportComparerByFrontMostStampCount);
-            for (int i = 0; i < viewports.Size; i++)
-                BulletText("Viewport #%d, ID: 0x%08X, FrontMostStampCount = %08d, Window: \"%s\"", viewports[i]->Idx, viewports[i]->ID, viewports[i]->LastFrontMostStampCount, viewports[i]->Window ? viewports[i]->Window->Name : "N/A");
+                ImQsort(viewports.Data, viewports.Size, sizeof(ImGuiViewport*), ViewportComparerByLastFocusedStampCount);
+            for (ImGuiViewportP* viewport : viewports)
+                BulletText("Viewport #%d, ID: 0x%08X, LastFocused = %08d, PlatformFocused = %s, Window: \"%s\"",
+                    viewport->Idx, viewport->ID, viewport->LastFocusedStampCount,
+                    (g.PlatformIO.Platform_GetWindowFocus && viewport->PlatformWindowCreated) ? (g.PlatformIO.Platform_GetWindowFocus(viewport) ? "1" : "0") : "N/A",
+                    viewport->Window ? viewport->Window->Name : "N/A");
             TreePop();
         }
-
         for (int i = 0; i < g.Viewports.Size; i++)
             DebugNodeViewport(g.Viewports[i]);
         TreePop();
@@ -19908,9 +19938,11 @@ void ImGui::DebugNodeViewport(ImGuiViewportP* viewport)
             viewport->WorkOffsetMin.x, viewport->WorkOffsetMin.y, viewport->WorkOffsetMax.x, viewport->WorkOffsetMax.y,
             viewport->PlatformMonitor, viewport->DpiScale * 100.0f);
         if (viewport->Idx > 0) { SameLine(); if (SmallButton("Reset Pos")) { viewport->Pos = ImVec2(200, 200); viewport->UpdateWorkRect(); if (viewport->Window) viewport->Window->Pos = viewport->Pos; } }
-        BulletText("Flags: 0x%04X =%s%s%s%s%s%s%s%s%s%s%s%s", viewport->Flags,
+        BulletText("Flags: 0x%04X =%s%s%s%s%s%s%s%s%s%s%s%s%s", viewport->Flags,
             //(flags & ImGuiViewportFlags_IsPlatformWindow) ? " IsPlatformWindow" : "", // Omitting because it is the standard
             (flags & ImGuiViewportFlags_IsPlatformMonitor) ? " IsPlatformMonitor" : "",
+            (flags & ImGuiViewportFlags_IsMinimized) ? " IsMinimized" : "",
+            (flags & ImGuiViewportFlags_IsFocused) ? " IsFocused" : "",
             (flags & ImGuiViewportFlags_OwnedByApp) ? " OwnedByApp" : "",
             (flags & ImGuiViewportFlags_NoDecoration) ? " NoDecoration" : "",
             (flags & ImGuiViewportFlags_NoTaskBarIcon) ? " NoTaskBarIcon" : "",
@@ -19918,9 +19950,8 @@ void ImGui::DebugNodeViewport(ImGuiViewportP* viewport)
             (flags & ImGuiViewportFlags_NoFocusOnClick) ? " NoFocusOnClick" : "",
             (flags & ImGuiViewportFlags_NoInputs) ? " NoInputs" : "",
             (flags & ImGuiViewportFlags_NoRendererClear) ? " NoRendererClear" : "",
-            (flags & ImGuiViewportFlags_TopMost) ? " TopMost" : "",
-            (flags & ImGuiViewportFlags_Minimized) ? " Minimized" : "",
             (flags & ImGuiViewportFlags_NoAutoMerge) ? " NoAutoMerge" : "",
+            (flags & ImGuiViewportFlags_TopMost) ? " TopMost" : "",
             (flags & ImGuiViewportFlags_CanHostOtherWindows) ? " CanHostOtherWindows" : "");
         for (int layer_i = 0; layer_i < IM_ARRAYSIZE(viewport->DrawDataBuilder.Layers); layer_i++)
             for (int draw_list_i = 0; draw_list_i < viewport->DrawDataBuilder.Layers[layer_i].Size; draw_list_i++)
@@ -20068,14 +20099,13 @@ void ImGui::ShowDebugLogWindow(bool* p_open)
         return;
     }
 
-    AlignTextToFramePadding();
-    Text("Log events:");
-    SameLine(); CheckboxFlags("All", &g.DebugLogFlags, ImGuiDebugLogFlags_EventMask_);
+    CheckboxFlags("All", &g.DebugLogFlags, ImGuiDebugLogFlags_EventMask_);
     SameLine(); CheckboxFlags("ActiveId", &g.DebugLogFlags, ImGuiDebugLogFlags_EventActiveId);
     SameLine(); CheckboxFlags("Focus", &g.DebugLogFlags, ImGuiDebugLogFlags_EventFocus);
     SameLine(); CheckboxFlags("Popup", &g.DebugLogFlags, ImGuiDebugLogFlags_EventPopup);
     SameLine(); CheckboxFlags("Nav", &g.DebugLogFlags, ImGuiDebugLogFlags_EventNav);
     SameLine(); if (CheckboxFlags("Clipper", &g.DebugLogFlags, ImGuiDebugLogFlags_EventClipper)) { g.DebugLogClipperAutoDisableFrames = 2; } if (IsItemHovered()) SetTooltip("Clipper log auto-disabled after 2 frames");
+    //SameLine(); CheckboxFlags("Selection", &g.DebugLogFlags, ImGuiDebugLogFlags_EventSelection);
     SameLine(); CheckboxFlags("IO", &g.DebugLogFlags, ImGuiDebugLogFlags_EventIO);
     SameLine(); CheckboxFlags("Docking", &g.DebugLogFlags, ImGuiDebugLogFlags_EventDocking);
     SameLine(); CheckboxFlags("Viewport", &g.DebugLogFlags, ImGuiDebugLogFlags_EventViewport);
